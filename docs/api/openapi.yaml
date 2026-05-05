@@ -1,0 +1,448 @@
+openapi: 3.0.3
+info:
+  title: Forex CRM Edge Functions API
+  description: |
+    API documentation for Forex CRM backend edge functions.
+    These functions handle telephony integration, email services, user management, and security monitoring.
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: https://lahchwagkhwypecmjojj.supabase.co/functions/v1
+    description: Production server
+
+tags:
+  - name: Telephony
+    description: Call center integration endpoints
+  - name: Email
+    description: Email sending and fetching endpoints
+  - name: Users
+    description: User management endpoints
+  - name: Security
+    description: Security monitoring endpoints
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /initiate-call:
+    post:
+      tags:
+        - Telephony
+      summary: Initiate a call
+      description: Initiates a call via the CCC (Call Center Connect) API
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone_number
+                - user_id
+              properties:
+                phone_number:
+                  type: string
+                  description: Phone number to call (with country code)
+                  example: "+1234567890"
+                user_id:
+                  type: string
+                  format: uuid
+                  description: ID of the user initiating the call
+                lead_id:
+                  type: string
+                  format: uuid
+                  description: Optional lead ID associated with the call
+                client_id:
+                  type: string
+                  format: uuid
+                  description: Optional client ID associated with the call
+      responses:
+        '200':
+          description: Call initiated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  call_id:
+                    type: string
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /hangup-call:
+    post:
+      tags:
+        - Telephony
+      summary: Hang up a call
+      description: Terminates an active call
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - call_id
+              properties:
+                call_id:
+                  type: string
+                  description: The CCC call ID to terminate
+      responses:
+        '200':
+          description: Call ended successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          description: CCC API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /call-control:
+    post:
+      tags:
+        - Telephony
+      summary: Control an active call
+      description: Perform actions on an active call (mute, hold, DTMF, etc.)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - call_id
+                - action
+              properties:
+                call_id:
+                  type: string
+                action:
+                  type: string
+                  enum: [end, mute, unmute, hold, unhold, dtmf]
+                digit:
+                  type: string
+                  description: Required for DTMF action
+      responses:
+        '200':
+          description: Action executed successfully
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /call-webhook:
+    post:
+      tags:
+        - Telephony
+      summary: CCC webhook receiver
+      description: Receives call status updates from CCC API
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                call_id:
+                  type: string
+                status:
+                  type: string
+                duration:
+                  type: integer
+                error_message:
+                  type: string
+      responses:
+        '200':
+          description: Webhook processed
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /send-email:
+    post:
+      tags:
+        - Email
+      summary: Send an email
+      description: Sends an email via the configured email provider
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - to
+                - subject
+                - body
+              properties:
+                to:
+                  type: string
+                  format: email
+                subject:
+                  type: string
+                body:
+                  type: string
+                cc:
+                  type: array
+                  items:
+                    type: string
+                    format: email
+                bcc:
+                  type: array
+                  items:
+                    type: string
+                    format: email
+      responses:
+        '200':
+          description: Email sent successfully
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /fetch-emails:
+    post:
+      tags:
+        - Email
+      summary: Fetch emails
+      description: Fetches emails from the configured email provider
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit:
+                  type: integer
+                  default: 50
+                since:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Emails fetched successfully
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /create-user:
+    post:
+      tags:
+        - Users
+      summary: Create a new user
+      description: Creates a new user account (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+                - full_name
+                - role
+              properties:
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 50
+                password:
+                  type: string
+                  minLength: 8
+                full_name:
+                  type: string
+                role:
+                  type: string
+                  enum: [ADMIN, MANAGER, SUPER_AGENT, AGENT]
+      responses:
+        '200':
+          description: User created successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Forbidden - Admin access required
+
+  /manage-user-password:
+    post:
+      tags:
+        - Users
+      summary: Reset user password
+      description: Resets a user's password (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+                - newPassword
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Password reset successfully
+        '403':
+          description: Forbidden
+
+  /security-monitor:
+    post:
+      tags:
+        - Security
+      summary: Security monitoring check
+      description: Runs security monitoring checks and creates alerts
+      responses:
+        '200':
+          description: Monitoring check completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  alerts_created:
+                    type: integer
+
+  /health-check:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the health status of the API
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /test-ccc-connection:
+    post:
+      tags:
+        - Telephony
+      summary: Test CCC API connection
+      description: Tests the connection to the CCC API
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Connection successful
+        '500':
+          description: Connection failed
+
+  /test-email-provider:
+    post:
+      tags:
+        - Email
+      summary: Test email provider connection
+      description: Tests the email provider configuration
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Connection successful
+        '500':
+          description: Connection failed
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase JWT token
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: string
+
+    RateLimitError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Too many requests
+        message:
+          type: string
+        retryAfter:
+          type: integer
+          description: Seconds to wait before retrying
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retrying
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Number of requests remaining
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RateLimitError'
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
